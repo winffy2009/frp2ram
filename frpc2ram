@@ -1,0 +1,162 @@
+#!/bin/sh /etc/rc.common
+
+# 在路由器内存中运行frpc
+# 适用flash小且无sd、usb扩展，ram足够大情况下（至少有10M空闲内存）
+# mt7620 LEDE17.09 8M flash / 128M ram 测试通过
+# 用法：
+# 将此脚本放到/etc/init.d/目录 并执行chmod +x /etc/init.d/frpc2ram
+# 启动 /etc/init.d/frpc2ram start
+# 停止 /etc/init.d/frpc2ram stop
+# 开机自启动 ln -s /etc/init.d/frpc2ram /etc/rc.d/S99frpc2ram
+
+# 在gui中系统--启动项中找到frpc2ram 对应操作也可以
+
+# 也可以将脚本所有内容贴到本地启动脚本中（在ext 0直接）实现开机启动
+# start #贴到本地启动脚本开机启动打开此注释
+
+# 必要修改的参数：
+# server 要连接的服务器域名或ip
+# port 要连接的服务器端口
+# token 
+
+# 配置文件：
+# 不存在$exec_conf配置文件的时候set_frpc_default_conf会自己产生
+# 需要修改自动产生配置文件内容的可改此函数EOF ....EOF之间的内容 
+#	set_frpc_default_conf(){
+# cat > $exec_conf<<-EOF
+# ....
+# EOF
+#
+# winffy2009
+# 2019.02.15
+START=99
+STOP=20
+USER_PROCD=1
+
+server=freenat.club
+port=7000
+token=frp888
+
+exec_dir=/tmp
+exec_file=$exec_dir/frpc
+exec_conf=$exec_dir/frpc.$server.ini
+exec_log=$exec_dir/frpc.$server.log
+exec_url=http://down.xxorg.com/frp/frp_0.23.1/frp_0.23.1_linux_mipsle/frpc
+
+#下载frpc失败，重试次数
+try_max=20
+
+start(){
+init
+		#后台运行frpc
+		$exec_file -c $exec_conf &
+		logger "【启动frpc成功 PID:$(ps |grep "frpc -c"|awk '{print $1}')】"
+}
+stop(){
+	kill -9 $(ps |grep "frpc -c"|awk '{print $1}')
+}
+restart(){
+	stop
+	sleep 10
+	start
+}
+
+init(){
+	if [ ! -f $exec_file ];then
+		try=1
+		while [ $try -lt $try_max ]; do 
+			ping -c 4 www.baidu.com |grep "ttl="&& net_ok=1||net_ok=0
+
+			if [ $net_ok == 1 ];then
+				logger "【 网络通了,开始下载frpc 】"
+				get_frpc
+				break
+			else
+				logger "【 网络还没通，3秒后重试$try 】"
+				try=$(($try+1))
+				sleep 3
+			fi
+		done
+	fi
+	
+	if [ ! -f $exec_conf ]; then
+		#产生配置文件
+		set_frpc_default_conf $server $port $token
+	fi
+}
+
+get_frpc(){
+	i=1
+	while [ $i -lt 3 ]; do
+		#下载frpc可执行程序 
+		wget -P $exec_dir $exec_url
+		#授权可执行
+		if [ -f $exec_file ];then
+			chmod +x $exec_file
+			logger "【 下载成功 】"
+			break
+		else
+			i=$(($i+1))
+		fi
+		logger "【 下载失败,重试$i 】"
+		sleep 5
+	done
+}
+
+#$1 服务器地址 $2 端口 $3 token
+set_frpc_default_conf(){
+cat > $exec_conf<<-EOF
+[common]
+	server_addr = $1
+	server_port = $2
+
+	token = $3
+	user = gnc_test_1
+	login_fail_exit = false
+	log_file = $exec_log
+
+[gncweb]
+	type=http
+	local_ip=192.168.10.254
+	local_port=8080
+	custom_domains=gncdemo.freenat.club
+
+[router]
+	type=http
+	local_ip=127.0.0.1
+	local_port=80
+	custom_domains=gnc18.freenat.club
+
+[ssh]
+	type = tcp
+	local_ip = 127.0.0.1
+	local_port = 22
+	remote_port =50022
+
+[m2a_test_23] 
+	type=tcp
+	local_ip=192.168.10.208
+	local_port=23
+	remote_port=50023
+
+[tcp52389]
+	type = tcp
+	local_ip = 192.168.10.38
+	local_port = 3389
+	remote_port = 52389
+	
+[tcp51389]
+	type = tcp
+	local_ip = 192.168.10.254
+	local_port = 3389
+	remote_port = 51389	
+	
+[tcp51013]
+	type = tcp
+	local_ip = 192.168.10.254
+	local_port = 51013
+	remote_port = 52013
+EOF
+}
+
+
