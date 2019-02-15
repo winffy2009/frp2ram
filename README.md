@@ -13,9 +13,9 @@
   也可以将脚本所有内容贴到本地启动脚本中（在ext 0直接）实现开机启动
  
 # 必要修改的参数：
-  server 要连接的服务器域名或ip
-  port 要连接的服务器端口
-  token 
+ <p> server 要连接的服务器域名或ip </p>
+ <p> port 要连接的服务器端口 </p>
+ <p> token </p>
 
 # 配置文件：
   不存在$exec_conf配置文件的时候set_frpc_default_conf会自己产生
